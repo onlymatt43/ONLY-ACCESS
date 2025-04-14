@@ -1,0 +1,98 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Access</title>
+  <style>
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      flex-direction: column;
+    }
+    h1 {
+      margin-bottom: 20px;
+      letter-spacing: 3px;
+    }
+    input {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid #00f2ff;
+      color: #fff;
+      font-size: 20px;
+      padding: 10px;
+      outline: none;
+      text-align: center;
+      width: 300px;
+      transition: 0.3s;
+    }
+    input:focus {
+      border-bottom: 2px solid #32ff7e;
+    }
+    #hint {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <h1>ENTER YOUR EMAIL</h1>
+  <input id="inputField" type="email" placeholder="your@email.com" autocomplete="off" />
+  <div id="hint"></div>
+
+  <script>
+    const input = document.getElementById("inputField");
+    const hint = document.getElementById("hint");
+    let email = "";
+
+    input.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        if (!email) {
+          const rawEmail = input.value.trim().toLowerCase();
+          if (!rawEmail.includes("@")) return (hint.textContent = "Invalid email");
+
+          const res = await fetch("https://onlyzoom-test.onrender.com/generate-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: rawEmail })
+          });
+
+          const data = await res.json();
+          if (data.blocked) {
+            window.location.href = "/ghost.html";
+          } else if (data.token) {
+            window.location.href = `/access?token=${data.token}`;
+          } else {
+            email = rawEmail;
+            input.type = "text";
+            input.placeholder = "choose a username";
+            input.value = "";
+            hint.textContent = "Enter a display name";
+          }
+        } else {
+          const res = await fetch("https://onlyzoom-test.onrender.com/generate-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email })
+          });
+          const data = await res.json();
+          if (data.token) {
+            window.location.href = `/access?token=${data.token}`;
+          } else {
+            hint.textContent = "Something went wrong";
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
