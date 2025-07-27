@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Panneau d'administration</title>
+  <style>
+    body { background:#333; color:#fff; font-family:sans-serif; padding:20px; }
+    input, button { width:100%; padding:10px; margin-top:10px; font-size:1em; }
+    pre { background:#111; padding:10px; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <h2>🔐 Création d'une famille de codes</h2>
+  <!-- Le formulaire envoie les champs 'label', 'count' et 'duration' en POST -->
+  <form action="/create_family" method="post">
+    <label>Nom du groupe</label>
+    <input type="text" name="label" placeholder="Nom famille"><br>
+
+    <label>Nombre de codes enfants</label>
+    <input type="number" name="count" min="1" max="100" value="5"><br>
+
+    <label>Durée (minutes)</label>
+    <input type="number" name="duration" value="15"><br>
+
+    <button type="submit">Créer la famille</button>
+  </form>
+
+  {% if codes %}
+    <h3>Codes générés à donner</h3>
+    <pre>{{ codes|join('\n') }}</pre>
+
+    <h3>Iframe à intégrer</h3>
+    <pre>
+&lt;iframe src="{{ unlock_url }}" width="300" height="200" style="border:none"&gt;&lt;/iframe&gt;
+    </pre>
+  {% endif %}
+
+  <p><a href="/export" style="color:white;">Exporter JSON complet</a> |
+     <a href="/logout" style="color:white;">Déconnexion</a></p>
+</body>
+</html>

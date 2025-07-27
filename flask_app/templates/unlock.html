@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Déverrouillage</title>
+</head>
+<body>
+  <h1>Entrer votre code</h1>
+  <input type="text" id="code" placeholder="Code">
+  <button onclick="submitCode()">Valider</button>
+  <p id="msg"></p>
+  <button onclick="logout()">Déconnexion</button>
+<script>
+// Récupération du family_id présent dans l'URL de la page
+const params = new URLSearchParams(window.location.search);
+const familyId = params.get('family_id');
+
+function submitCode(){
+  fetch('/api/unlock', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: document.getElementById('code').value,
+      family_id: familyId
+    })
+  })
+  .then(r => r.json())
+  .then(d => { document.getElementById('msg').innerText = d.success ? 'Succès' : d.message; });
+}
+
+function logout(){
+  fetch('/api/reset_cookie').then(() => { document.getElementById('msg').innerText = 'Déconnecté'; });
+}
+</script>
+</body>
+</html>
