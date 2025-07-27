@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Admin Login</title>
+</head>
+<body>
+  <h1>Connexion Admin</h1>
+  {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+  <form method="post">
+    <label>Utilisateur: <input type="text" name="username"></label><br>
+    <label>Mot de passe: <input type="password" name="password"></label><br>
+    <button type="submit">Se connecter</button>
+  </form>
+</body>
+</html>
