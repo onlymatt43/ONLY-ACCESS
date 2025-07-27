@@ -14,7 +14,11 @@
   </form>
   <p><a href="/export">Exporter le JSON complet</a></p>
   {% if codes %}
-  <h2>Codes générés</h2>
+  <h2>Famille créée</h2>
+  <p>family_id: {{ family_id }}</p>
+  <!-- Exemple d'intégration d'un iframe pour cette famille -->
+  <code>&lt;iframe src="https://votre-app.onrender.com/unlock?family_id={{ family_id }}" width="300" height="200"&gt;&lt;/iframe&gt;</code>
+  <h3>Codes générés</h3>
   <ul>
     {% for c in codes %}<li>{{ c }}</li>{% endfor %}
   </ul>

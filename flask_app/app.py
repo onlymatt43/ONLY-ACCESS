@@ -77,6 +77,10 @@ def index():
 @app.route('/create_family', methods=['POST'])
 @login_required
 def create_family():
+    """Crée une famille de codes.
+
+    Appeler cette route plusieurs fois pour générer des familles distinctes.
+    """
     # number of child codes, duration in minutes and label are provided by admin
     count = int(request.form.get('count', 0))
     duration = int(request.form.get('duration', 0))
@@ -106,9 +110,10 @@ def create_family():
         })
         codes_plain.append(code_plain)
 
+    # Chaque appel ajoute une nouvelle famille distincte dans le fichier JSON
     data['families'].append(family)
     save_data(data)
-    return render_template('index.html', codes=codes_plain)
+    return render_template('index.html', codes=codes_plain, family_id=family_id)
 
 @app.route('/export')
 @login_required
@@ -118,32 +123,43 @@ def export():
 
 @app.route('/unlock')
 def unlock_page():
+    """Page de saisie de code utilisable dans un iframe."""
+    # La page lit elle-même le paramètre family_id via JavaScript
     return render_template('unlock.html')
 
 @app.route('/api/unlock', methods=['POST'])
 def api_unlock():
+    """Déverrouille un code enfant appartenant à une famille précise."""
     # rate limit unlock attempts per IP
     if not check_brute_force(request.remote_addr):
         return jsonify({'success': False, 'message': 'Trop de tentatives. Réessayez plus tard.'}), 429
 
     code = request.json.get('code', '')
+    family_id = request.json.get('family_id')
+    if not family_id:
+        return jsonify({'success': False, 'message': 'Famille manquante'}), 400
+
     code_hash = hashlib.sha256(code.encode()).hexdigest()
     data = load_data()
-    for family in data['families']:
-        for child in family['children']:
-            if child['hash'] == code_hash:
-                if child['used']:
-                    return jsonify({'success': False, 'message': 'Code déjà utilisé'}), 400
-                child['used'] = True
-                child['used_ip'] = request.remote_addr
-                now = datetime.utcnow()
-                child['activation'] = now.isoformat()
-                child['expiration'] = (now + timedelta(minutes=family['duration'])).isoformat()
-                save_data(data)
-                resp = jsonify({'success': True})
-                resp.set_cookie('token_id', child['id'], httponly=True, samesite='Lax')
-                return resp
-    return jsonify({'success': False, 'message': 'Code invalide'}), 400
+    family = next((f for f in data['families'] if f['family_id'] == family_id), None)
+    if not family:
+        return jsonify({'success': False, 'message': 'Famille inconnue'}), 400
+
+    for child in family['children']:
+        if child['hash'] == code_hash:
+            if child['used']:
+                return jsonify({'success': False, 'message': 'Code déjà utilisé'}), 400
+            child['used'] = True
+            child['used_ip'] = request.remote_addr
+            now = datetime.utcnow()
+            child['activation'] = now.isoformat()
+            child['expiration'] = (now + timedelta(minutes=family['duration'])).isoformat()
+            save_data(data)
+            resp = jsonify({'success': True})
+            resp.set_cookie('token_id', child['id'], httponly=True, samesite='Lax')
+            return resp
+
+    return jsonify({'success': False, 'message': 'Ce code ne correspond pas à ce groupe'}), 400
 
 @app.route('/api/validate_cookie')
 def validate_cookie():
