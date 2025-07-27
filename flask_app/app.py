@@ -10,7 +10,6 @@ from functools import wraps
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'password'
 SECRET_KEY = os.environ.get('SECRET_KEY', 'change_me')
-# file where all families and child tokens are stored
 DATA_FILE = os.path.join(os.path.dirname(__file__), 'data', 'tokens.json')
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -37,7 +36,6 @@ def login_required(f):
     return decorated_function
 
 # --- Rate limiting for unlock ---
-# simple in-memory counter of attempts per IP
 ATTEMPTS = {}
 MAX_ATTEMPTS = 10
 WINDOW_SECONDS = 60
@@ -54,13 +52,12 @@ def check_brute_force(ip):
 # --- Routes ---
 @app.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
-    """Simple login form to protect admin routes"""
     if request.method == 'POST':
         if request.form.get('username') == ADMIN_USER and request.form.get('password') == ADMIN_PASS:
             session['logged_in'] = True
-            return redirect(url_for('index'))
-        return render_template('admin_login.html', error='Mauvais identifiants')
-    return render_template('admin_login.html')
+            return redirect(url_for('dashboard'))
+        return render_template('dashboard.html', error='Mauvais identifiants', familles=load_data().get('families', []), session=session)
+    return render_template('dashboard.html', familles=load_data().get('families', []), session=session)
 
 @app.route('/logout')
 @login_required
@@ -68,93 +65,69 @@ def logout():
     session.clear()
     return redirect(url_for('admin_login'))
 
-@app.route('/')
-@login_required
-def index():
-    """Page d'administration affichant le formulaire de création."""
-    return render_template('index.html')
-
-@app.route('/create_family', methods=['POST'])
-@login_required
-def create_family():
-    """Crée une famille de codes.
-
-    Appeler cette route plusieurs fois pour générer des familles distinctes.
-    """
-    # number of child codes, duration in minutes and label are provided by admin
-    count = int(request.form.get('count', 0))
-    duration = int(request.form.get('duration', 0))
-    label = request.form.get('label', '')
-
+@app.route('/dashboard', methods=['GET', 'POST'])
+def dashboard():
+    error = None
     data = load_data()
-    family_id = str(uuid.uuid4())
-    family = {
-        'family_id': family_id,
-        'label': label,
-        'duration': duration,
-        'children': []
-    }
-    codes_plain = []
-    for _ in range(count):
-        # generate a unique code, store only its hash
-        code_plain = str(uuid.uuid4())
-        code_hash = hashlib.sha256(code_plain.encode()).hexdigest()
-        child_id = str(uuid.uuid4())
-        family['children'].append({
-            'id': child_id,
-            'hash': code_hash,
-            'used': False,
-            'used_ip': None,
-            'activation': None,
-            'expiration': None
-        })
-        codes_plain.append(code_plain)
+    familles = data.get('families', [])
 
-    # Chaque appel ajoute une nouvelle famille distincte dans le fichier JSON
-    data['families'].append(family)
-    save_data(data)
-    # URL complète pour intégrer cette famille via iframe
-    unlock_url = url_for('unlock_page', family_id=family_id, _external=True)
-    # renvoyer la page admin avec les codes clairs et l'iframe de la famille
-    return render_template('index.html', codes=codes_plain,
-                           family_id=family_id, unlock_url=unlock_url)
+    # Gestion connexion admin
+    if not session.get('logged_in'):
+        if request.method == 'POST' and 'username' in request.form:
+            if request.form.get('username') == ADMIN_USER and request.form.get('password') == ADMIN_PASS:
+                session['logged_in'] = True
+                return redirect(url_for('dashboard'))
+            else:
+                error = "Mauvais identifiants"
+        return render_template('dashboard.html', familles=familles, error=error, session=session)
 
-# Route API pour génération via appel JavaScript
-@app.route('/api/create_family', methods=['POST'])
-@login_required
-def api_create_family():
-    """API JSON pour créer une famille de codes et renvoyer les codes clairs"""
-    payload = request.get_json(force=True)
-    count = int(payload.get('count', 0))
-    duration = int(payload.get('duration', 0))
-    label = payload.get('label', '')
+    # Création famille
+    if request.method == 'POST' and 'site' in request.form:
+        site = request.form.get('site', '').strip()
+        specificite = request.form.get('specificite', '').strip()
+        import random
+        random_digits = str(random.randint(1000, 9999))
+        family_code = f"{site}_{specificite}_{random_digits}"
+        family_id = str(uuid.uuid4())
+        family = {
+            'family_id': family_id,
+            'site': site,
+            'specificite': specificite,
+            'family_code': family_code,
+            'children': []
+        }
+        data['families'].append(family)
+        save_data(data)
+        return redirect(url_for('dashboard'))
 
-    data = load_data()
-    family_id = str(uuid.uuid4())
-    family = {
-        'family_id': family_id,
-        'label': label,
-        'duration': duration,
-        'children': []
-    }
-    codes_plain = []
-    for _ in range(count):
-        code_plain = str(uuid.uuid4())
-        code_hash = hashlib.sha256(code_plain.encode()).hexdigest()
-        child_id = str(uuid.uuid4())
-        family['children'].append({
-            'id': child_id,
-            'hash': code_hash,
-            'used': False,
-            'used_ip': None,
-            'activation': None,
-            'expiration': None
-        })
-        codes_plain.append(code_plain)
+    # Ajout code enfant
+    if request.method == 'POST' and 'child_code' in request.form:
+        family_id = request.form.get('family_id')
+        child_code = request.form.get('child_code', '').strip()
+        child_specificite = request.form.get('child_specificite', '').strip()
+        try:
+            child_duration = int(request.form.get('child_duration', '60'))
+        except ValueError:
+            child_duration = 60
+        family = next((f for f in familles if f['family_id'] == family_id), None)
+        if family and child_code:
+            code_hash = hashlib.sha256(child_code.encode()).hexdigest()
+            child = {
+                'id': str(uuid.uuid4()),
+                'code': child_code,
+                'specificite': child_specificite,
+                'hash': code_hash,
+                'duration': child_duration,
+                'used': False,
+                'used_ip': None,
+                'activation': None,
+                'expiration': None
+            }
+            family['children'].append(child)
+            save_data(data)
+        return redirect(url_for('dashboard'))
 
-    data['families'].append(family)
-    save_data(data)
-    return jsonify({'success': True, 'family_id': family_id, 'codes': codes_plain})
+    return render_template('dashboard.html', familles=familles, error=error, session=session)
 
 @app.route('/export')
 @login_required
@@ -164,20 +137,10 @@ def export():
 
 @app.route('/unlock')
 def unlock_page():
-    """Page de saisie de code utilisable dans un iframe."""
-    # La page lit elle-même le paramètre family_id via JavaScript
     return render_template('unlock.html')
 
 @app.route('/api/unlock', methods=['POST'])
 def api_unlock():
-    """Déverrouille un code enfant d'une famille spécifique.
-
-    Cette route attend un JSON contenant ``code`` et ``family_id``. Elle est
-    protégée contre le bruteforce via ``check_brute_force`` et valide que le
-    code appartient bien à la famille avant d'activer le token et de poser un
-    cookie.
-    """
-    # rate limit unlock attempts per IP
     if not check_brute_force(request.remote_addr):
         return jsonify({'success': False, 'message': 'Trop de tentatives. Réessayez plus tard.'}), 429
 
@@ -200,7 +163,7 @@ def api_unlock():
             child['used_ip'] = request.remote_addr
             now = datetime.utcnow()
             child['activation'] = now.isoformat()
-            child['expiration'] = (now + timedelta(minutes=family['duration'])).isoformat()
+            child['expiration'] = (now + timedelta(minutes=child['duration'])).isoformat()
             save_data(data)
             resp = jsonify({'success': True})
             resp.set_cookie('token_id', child['id'], httponly=True, samesite='Lax')
@@ -217,7 +180,6 @@ def validate_cookie():
     for family in data['families']:
         for child in family['children']:
             if child['id'] == token_id:
-                # token must be marked as used and IP must match
                 if not child['used']:
                     return jsonify({'valid': False})
                 if child['used_ip'] != request.remote_addr:
@@ -229,7 +191,6 @@ def validate_cookie():
 
 @app.route('/api/reset_cookie')
 def reset_cookie():
-    # clear authentication cookie
     resp = jsonify({'success': True})
     resp.set_cookie('token_id', '', expires=0)
     return resp

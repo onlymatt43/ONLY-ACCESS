@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard</title>
+</head>
+<body>
+  <h1>Administration</h1>
+
+  <!-- Section connexion admin -->
+  {% if not session.logged_in %}
+    <h2>Connexion Admin</h2>
+    {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin_login">
+      <label>Utilisateur: <input type="text" name="username"></label><br>
+      <label>Mot de passe: <input type="password" name="password"></label><br>
+      <button type="submit">Se connecter</button>
+    </form>
+    <hr>
+  {% endif %}
+
+  <!-- Section création token famille -->
+  {% if session.logged_in %}
+    <h2>Créer un token famille</h2>
+    <form method="post" action="/create_family">
+      <label>Nom du site : <input type="text" name="site" required></label><br>
+      <label>Spécificité : <input type="text" name="specificite" required></label><br>
+      <button type="submit">Créer le token famille</button>
+    </form>
+    <hr>
+
+    <!-- Section familles existantes et iframe -->
+    <h2>Familles existantes</h2>
+    {% for famille in familles %}
+      <div style="border:1px solid #ccc; margin-bottom:1em; padding:1em;">
+        <strong>{{ famille.site }}</strong> ({{ famille.specificite }})<br>
+        Token famille : <strong>{{ famille.family_code }}</strong><br>
+        <code>&lt;iframe src="https://only-access.onrender.com/unlock?family_id={{ famille.family_id }}" width="300" height="200"&gt;&lt;/iframe&gt;</code>
+        <h3>Ajouter un code enfant</h3>
+        <form method="post" action="/dashboard">
+          <input type="hidden" name="family_id" value="{{ famille.family_id }}">
+          <label>Code enfant : <input type="text" name="child_code" required></label>
+          <label>Spécificité enfant : <input type="text" name="child_specificite" required></label>
+          <label>Durée (minutes) : <input type="number" name="child_duration" value="60" min="1" required></label>
+          <button type="submit">Ajouter</button>
+        </form>
+        <h4>Codes enfants existants :</h4>
+        <ul>
+          {% for child in famille.children %}
+            <li>{{ child.code }} {% if child.used %}(utilisé){% endif %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+    <p><a href="/logout">Déconnexion</a></p>
+  {% endif %}
+</body>
+</html>@app.route('/dashboard', methods=['GET', 'POST'])
+def dashboard():
+    error = None
+    data = load_data()
+    familles = data.get('families', [])
+
+    # Gestion connexion admin
+    if not session.get('logged_in'):
+        if request.method == 'POST' and 'username' in request.form:
+            if request.form.get('username') == ADMIN_USER and request.form.get('password') == ADMIN_PASS:
+                session['logged_in'] = True
+                return redirect(url_for('dashboard'))
+            else:
+                error = "Mauvais identifiants"
+        return render_template('dashboard.html', familles=familles, error=error, session=session)
+
+    # Création famille
+    if request.method == 'POST' and 'site' in request.form:
+        site = request.form.get('site', '').strip()
+        specificite = request.form.get('specificite', '').strip()
+        import random
+        random_digits = str(random.randint(1000, 9999))
+        family_code = f"{site}_{specificite}_{random_digits}"
+        family_id = str(uuid.uuid4())
+        family = {
+            'family_id': family_id,
+            'site': site,
+            'specificite': specificite,
+            'family_code': family_code,
+            'children': []
+        }
+        data['families'].append(family)
+        save_data(data)
+        return redirect(url_for('dashboard'))
+
+    # Ajout code enfant
+    if request.method == 'POST' and 'child_code' in request.form:
+        family_id = request.form.get('family_id')
+        child_code = request.form.get('child_code', '').strip()
+        child_specificite = request.form.get('child_specificite', '').strip()
+        child_duration = request.form.get('child_duration', '60')
+        family = next((f for f in familles if f['family_id'] == family_id), None)
+        if family and child_code:
+            code_hash = hashlib.sha256(child_code.encode()).hexdigest()
+            child = {
+                'id': str(uuid.uuid4()),
+                'code': child_code,
+                'hash': code_hash,
+                'used': False,
+                'used_ip': None,
+                'activation': None,
+                'expiration': None,
+                'specificite': child_specificite,
+                'duration': int(child_duration)
+            }
+            family['children'].append(child)
+            save_data(data)
+        return redirect(url_for('dashboard'))
+
+    return render_template('dashboard.html', familles=familles, error=error, session=session)
