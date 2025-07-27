@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Administration</title>
+</head>
+<body>
+  <h1>Génération de cartes</h1>
+  <form method="post" action="/create_family">
+    <label>Label: <input type="text" name="label"></label><br>
+    <label>Nombre de codes: <input type="number" name="count" value="1"></label><br>
+    <label>Durée (minutes): <input type="number" name="duration" value="60"></label><br>
+    <button type="submit">Créer la famille</button>
+  </form>
+  <p><a href="/export">Exporter le JSON complet</a></p>
+  {% if codes %}
+  <h2>Codes générés</h2>
+  <ul>
+    {% for c in codes %}<li>{{ c }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p><a href="/logout">Déconnexion</a></p>
+</body>
+</html>
