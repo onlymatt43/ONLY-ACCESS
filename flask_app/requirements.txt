@@ -1,0 +1,2 @@
+# Liste des dépendances nécessaires pour exécuter l'application Flask
+flask
